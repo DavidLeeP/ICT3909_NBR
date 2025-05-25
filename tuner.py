@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import datetime
 from mail import send_email
-from trueVers.GNN import BipartiteGNN, HyperParameters, load_data, clean_memory
+from GNN import BipartiteGNN, HyperParameters, load_data, clean_memory
 from ICT3909_NBR.train_gnn import train_rl_agent
 
 # Check if CUDA is available
