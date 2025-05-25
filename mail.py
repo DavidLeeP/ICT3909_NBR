@@ -11,6 +11,11 @@ def send_email(subject, body):
     receiver_email = "" # put the recipient email here
     password = ""  # get the app password from your mailing account. This is not the normal password for the email account.
     
+    # Check if email configuration is complete
+    if not sender_email or not receiver_email or not password:
+        print("Email configuration is incomplete. Not sending email.")
+        return
+    
     # Create message
     message = MIMEMultipart()
     message["From"] = sender_email
