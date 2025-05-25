@@ -7,19 +7,12 @@ import os
 import matplotlib.pyplot as plt
 
 # File paths
+# Truth file goes here
 truthFile = "trueVers/instacart_test_baskets.csv"
-# prediction_files = [
-#     "meta_learner_predictions_20250512_235701.csv",
-#     "meta_learner_predictions_20250513_033816.csv",
-#     "meta_learner_predictions_20250513_103906.csv",
-#     "meta_learner_predictions_20250513_112420.csv",
-#     "meta_learner_predictions_20250513_120448.csv",
-#     "meta_learner_predictions_20250513_132939.csv",
-#     "meta_learner_predictions_20250513_141217.csv",
-# ]
 
+# any number of files can be added here and the average metrics will be returned
 prediction_files = [
-    "10b_preds/meta_learner_predictions_20250523_224032.csv",
+    #"10b_preds/meta_learner_predictions_20250523_224032.csv",
     #"10b_preds/meta_learner_predictions_20250523_222034.csv",
     #"10b_preds/meta_learner_predictions_20250520_003839.csv",
     #"10b_preds/meta_learner_predictions_20250520_000939.csv",

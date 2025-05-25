@@ -13,7 +13,7 @@ import numpy as np
 import datetime
 from mail import send_email
 from trueVers.GNN import BipartiteGNN, HyperParameters, load_data, clean_memory
-from train_gnn4 import train_rl_agent
+from ICT3909_NBR.train_gnn import train_rl_agent
 
 # Check if CUDA is available
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
