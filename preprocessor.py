@@ -52,10 +52,6 @@ print(f"Number of missing users: {len(missing_users)}")
 print(f"First 10 missing users: {sorted(list(missing_users))[:10]}")
 print(f"Last 10 missing users: {sorted(list(missing_users))[-10:]}")
 
-# Check if specific users are in the filtered data
-for user in test_users:
-    print(f"User {user} in filtered data: {user in user_order['user_id'].unique()}")
-
 baskets = None
 for user, user_data in user_order.groupby('user_id'):
     date_list = list(set(user_data['order_number'].tolist()))
