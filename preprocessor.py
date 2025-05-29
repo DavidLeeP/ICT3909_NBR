@@ -1,139 +1,146 @@
-# This is the preprocessor for the instacart dataset.
-
 import pandas as pd
 import numpy as np
 
-# Read instacart_future and create a set of user IDs
-future_users = pd.read_csv('trueVers/instacart_future.csv', dtype={'user_id': int})
-future_user_set = set(future_users['user_id'].unique())
-print(f"Number of users in future dataset: {len(future_user_set)}")
-print(f"Maximum user ID in future dataset: {max(future_user_set)}")
-print(f"Minimum user ID in future dataset: {min(future_user_set)}")
+# Read the data files
+orders = pd.read_csv('orders.csv')
+order_products_prior = pd.read_csv('order_products__prior.csv')
+order_products_train = pd.read_csv('order_products__train.csv')
 
-user_order_d = pd.read_csv('orders.csv',
-                         usecols=['user_id', 'order_number', 'order_id', 'eval_set', 'days_since_prior_order'],
-                         dtype={'user_id': int})
-print(f"Number of users in orders.csv: {len(user_order_d['user_id'].unique())}")
+# Get first 20000 unique users
+unique_users = orders['user_id'].unique()[:19435]
+orders = orders[orders['user_id'].isin(unique_users)]
 
-# Get the first 19435 users
-first_users = sorted(user_order_d['user_id'].unique())[:19435]
-print(f"Number of users to process: {len(first_users)}")
-print(f"First user ID: {first_users[0]}")
-print(f"Last user ID: {first_users[-1]}")
+# Merge orders with prior products
+prior_orders = orders[orders['eval_set'] == 'prior']
+prior_merged = pd.merge(prior_orders, order_products_prior, on='order_id')
 
-order_item_train = pd.read_csv('order_products__train.csv',
-                               usecols=['order_id', 'product_id'])
-order_item_prior = pd.read_csv('order_products__prior.csv',
-                               usecols=['order_id', 'product_id'])
-order_item = pd.concat([order_item_prior, order_item_train], ignore_index=True)
+# Merge orders with train products
+train_orders = orders[orders['eval_set'] == 'train']
+train_merged = pd.merge(train_orders, order_products_train, on='order_id')
 
-# Remap product IDs to start from 1
-unique_products = sorted(order_item['product_id'].unique())
-product_map = {old_id: new_id for new_id, old_id in enumerate(unique_products, 1)}
-order_item['product_id'] = order_item['product_id'].map(product_map)
+# Combine the merged dataframes
+combined_data = pd.concat([prior_merged, train_merged])
 
-user_order = pd.merge(user_order_d, order_item, on='order_id', how='left')
-print(f"Number of users after merge: {len(user_order['user_id'].unique())}")
+# Fill null values in time_since_last_basket with 0
+combined_data['days_since_prior_order'] = combined_data['days_since_prior_order'].fillna(0)
 
-user_order = user_order.dropna(how='any')
-print(f"Number of users after dropna: {len(user_order['user_id'].unique())}")
+# Create initial dataframe with exact columns
+initial_data = pd.DataFrame({
+    'user_id': combined_data['user_id'],
+    'order_id': combined_data['order_id'],
+    'days_since_prior_order': combined_data['days_since_prior_order'],
+    'product_id': combined_data['product_id']
+})
 
-# Fill NaN values in days_since_prior_order with 0
-user_order['days_since_prior_order'] = user_order['days_since_prior_order'].fillna(0)
+# Sort the data
+initial_data = initial_data.sort_values(['user_id', 'order_id'])
 
-# Filter users to only include the first 19435
-user_order = user_order[user_order['user_id'].isin(first_users)]
-print(f"Number of users after filtering: {len(user_order['user_id'].unique())}")
+# Filter out baskets that don't meet size requirements first
+print("\nFiltering basket sizes...")
+basket_sizes = initial_data.groupby(['user_id', 'order_id']).size()
+valid_baskets = basket_sizes[(basket_sizes >= 3) & (basket_sizes <= 50)].index
+initial_data = initial_data[initial_data.set_index(['user_id', 'order_id']).index.isin(valid_baskets)]
 
-# Debug missing users
-all_users = set(range(1, max(future_user_set) + 1))
-missing_users = all_users - set(user_order['user_id'].unique())
-print(f"Number of missing users: {len(missing_users)}")
-print(f"First 10 missing users: {sorted(list(missing_users))[:10]}")
-print(f"Last 10 missing users: {sorted(list(missing_users))[-10:]}")
+# First pass: Count frequencies and identify products to keep
+product_counts = {}
+for product_id in initial_data['product_id']:
+    product_counts[product_id] = product_counts.get(product_id, 0) + 1
 
-# Check if specific users are in the filtered data
-for user in test_users:
-    print(f"User {user} in filtered data: {user in user_order['user_id'].unique()}")
+# Filter out products that appear less than 17 times
+valid_products = {pid for pid, count in product_counts.items() if count >= 17}
 
-baskets = None
-for user, user_data in user_order.groupby('user_id'):
-    date_list = list(set(user_data['order_number'].tolist()))
-    date_list = sorted(date_list)
-    print(f"Processing user {user} with {len(date_list)} orders")
-    date_num = 1
-    for date in date_list:
-        date_data = user_data[user_data['order_number'].isin([date])]
-        date_item = list(set(date_data['product_id'].tolist()))
-        item_num = len(date_item)
-        days_since = date_data['days_since_prior_order'].iloc[0]  # Get days since prior order
-        order_id = date_data['order_id'].iloc[0]  # Get order_id
-        
-        if baskets is None:
-            baskets = pd.DataFrame({'user_id': pd.Series([user for i in range(item_num)]),
-                                    'order_number': pd.Series([date_num for i in range(item_num)]),
-                                    'order_id': pd.Series([order_id for i in range(item_num)]),
-                                    'product_id': pd.Series(date_item),
-                                    'eval_set': pd.Series(['prior' for i in range(item_num)]),
-                                    'days_since_prior_order': pd.Series([days_since for i in range(item_num)])})
-            date_num += 1
-        else:
-            if date == date_list[-1]:#if date is the last. then add a tag here
-                temp = pd.DataFrame({'user_id': pd.Series([user for i in range(item_num)]),
-                                        'order_number': pd.Series([date_num for i in range(item_num)]),
-                                        'order_id': pd.Series([order_id for i in range(item_num)]),
-                                        'product_id': pd.Series(date_item),
-                                        'eval_set': pd.Series(['train' for i in range(item_num)]),
-                                        'days_since_prior_order': pd.Series([days_since for i in range(item_num)])})
-                date_num += 1
-                baskets = pd.concat([baskets, temp], ignore_index=True)
-            else:
-                temp = pd.DataFrame({'user_id': pd.Series([user for i in range(item_num)]),
-                                        'order_number': pd.Series([date_num for i in range(item_num)]),
-                                        'order_id': pd.Series([order_id for i in range(item_num)]),
-                                        'product_id': pd.Series(date_item),
-                                        'eval_set': pd.Series(['prior' for i in range(item_num)]),
-                                        'days_since_prior_order': pd.Series([days_since for i in range(item_num)])})
-                date_num += 1
-                baskets = pd.concat([baskets, temp], ignore_index=True)
+print("Remapping products")
+# Create new mapping for remaining products (first come first serve)
+product_mapping = {}
+current_index = 1
+# Map products in order of first appearance
+for product_id in initial_data['product_id'].unique():
+    if product_id in valid_products:
+        product_mapping[product_id] = current_index
+        current_index += 1
 
-print('total transactions:', len(baskets))
-print(f"Number of unique users in baskets: {len(baskets['user_id'].unique())}")
+# Filter the data to keep only valid products and apply mapping
+final_data = initial_data[initial_data['product_id'].isin(valid_products)].copy()
+final_data['product_id'] = final_data['product_id'].map(product_mapping)
 
-# Check if specific users are in the baskets
-for user in test_users:
-    print(f"User {user} in baskets: {user in baskets['user_id'].unique()}")
+# Find maximum basket size while processing users
+print("\nProcessing users:")
+current_user_id = None
+current_order_id = None
+index = 1
+new_order_ids = []
+max_basket_size = 0
+current_basket_size = 0
 
-# Find the maximum basket size
-max_basket_size = baskets.groupby(['user_id', 'order_id'])['product_id'].count().max()
+print("Processing baskets...")
+for _, row in final_data.iterrows():
+    if current_user_id != row['user_id']:
+        current_user_id = row['user_id']
+        current_order_id = row['order_id']
+        index = 1
+        current_basket_size = 1
+        print(f"Processing user_id: {current_user_id}")
+    elif current_order_id != row['order_id']:
+        current_order_id = row['order_id']
+        index += 1
+        max_basket_size = max(max_basket_size, current_basket_size)
+        current_basket_size = 1
+    else:
+        current_basket_size += 1
+    
+    new_order_ids.append(index)
 
-# Create a function to transform basket data
-def transform_basket(group):
-    items = group['product_id'].tolist()
-    # Pad with zeros if needed
-    items.extend([0] * (max_basket_size - len(items)))
-    return pd.Series(items)
+# Update max_basket_size with the last basket
+max_basket_size = max(max_basket_size, current_basket_size)
+final_data['order_id'] = new_order_ids
 
-# Split data into last orders and other orders
-last_orders = baskets.groupby('user_id').apply(lambda x: x[x['order_number'] == x['order_number'].max()]).reset_index(drop=True)
-other_orders = baskets[~baskets.index.isin(last_orders.index)]
+print("Reshaping data into basket format...")
+# Reshape the data into basket format
+basket_data = []
+for (user_id, order_id), group in final_data.groupby(['user_id', 'order_id']):
+    basket = {
+        'user_id': user_id,
+        'order_id': order_id,
+        'days_since_prior_order': group['days_since_prior_order'].iloc[0]
+    }
+    # Add items as columns
+    for i, product_id in enumerate(group['product_id'], 1):
+        basket[f'item{i}'] = product_id
+    # Fill remaining item columns with 0
+    for i in range(len(group) + 1, max_basket_size + 1):
+        basket[f'item{i}'] = 0
+    basket_data.append(basket)
 
-print(f"Number of users in last orders: {len(last_orders['user_id'].unique())}")
-print(f"Number of users in other orders: {len(other_orders['user_id'].unique())}")
+# Create the final basket dataframe
+basket_df = pd.DataFrame(basket_data)
 
-# Check if specific users are in the last orders
-for user in test_users:
-    print(f"User {user} in last orders: {user in last_orders['user_id'].unique()}")
+# Separate last order of each user into test set
+print("\nSeparating test set...")
+test_data = []
+train_data = []
 
-# Transform both datasets
-last_orders_transformed = last_orders.groupby(['user_id', 'order_id', 'days_since_prior_order']).apply(transform_basket).reset_index()
-other_orders_transformed = other_orders.groupby(['user_id', 'order_id', 'days_since_prior_order']).apply(transform_basket).reset_index()
+# Group by user_id and get the last order for each user
+for user_id, user_group in basket_df.groupby('user_id'):
+    # Sort by order_id to ensure we get the last order
+    user_group = user_group.sort_values('order_id')
+    # Get the last order
+    last_order = user_group.iloc[-1]
+    test_data.append(last_order)
+    # Add all other orders to training data
+    train_data.extend(user_group.iloc[:-1].to_dict('records'))
 
-# Rename columns
-item_columns = [f'item{i+1}' for i in range(max_basket_size)]
-last_orders_transformed.columns = ['user_id', 'order_id', 'days_since_prior_order'] + item_columns
-other_orders_transformed.columns = ['user_id', 'order_id', 'days_since_prior_order'] + item_columns
+# Create train and test dataframes
+train_df = pd.DataFrame(train_data)
+test_df = pd.DataFrame(test_data)
 
-# Save to CSV files
-last_orders_transformed.to_csv('instacart_test_baskets.csv', index=False)
-other_orders_transformed.to_csv('instacart_train_baskets.csv', index=False)
+# Save the processed data
+train_df.to_csv('trueVers/instacart_train_baskets.csv', index=False)
+test_df.to_csv('trueVers/instacart_test_baskets.csv', index=False)
+
+# Save the product mapping
+pd.DataFrame(list(product_mapping.items()), columns=['original_id', 'new_id']).to_csv('product_mapping.csv', index=False)
+
+print(f"\nProcessed {len(train_df)} training orders")
+print(f"Processed {len(test_df)} test orders")
+print(f"Total unique products after filtering: {len(product_mapping)}")
+print(f"Maximum basket size: {max_basket_size}")
