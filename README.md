@@ -1,6 +1,6 @@
 # ICT3909_NBR
 
-Needed imports:
+Before Running, the following must be installed:
 
 ```bash
 # PyTorch and related packages
